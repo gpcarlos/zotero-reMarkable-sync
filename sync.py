@@ -2,9 +2,9 @@ import os
 import sys
 import argparse
 from colorama import Fore, Style
-from common import list_local_files, compare
-from zotero_utils import Zotero
-from rM_utils import ReMarkable
+from utils.common import list_local_files, compare
+from utils.zotero import Zotero
+from utils.remarkable import ReMarkable
 
 def get_args():
     """Command line argument parsing"""
@@ -136,7 +136,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-#

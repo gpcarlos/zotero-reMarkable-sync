@@ -1,10 +1,10 @@
 import sys
 import argparse
-from rM_utils import authorize
+from utils.remarkable import authorize
 
 def get_args():
     """Command line argument parsing"""
-    
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--security-code", "-s",
