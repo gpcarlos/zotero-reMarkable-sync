@@ -2,11 +2,9 @@ import os
 import sys
 import argparse
 from colorama import Fore, Style
-from rmapy.api import Client
-from rmapy.exceptions import AuthError
-from rmapy.folder import Folder
-from rmapy.document import ZipDocument
-from pyzotero import zotero, zotero_errors
+from zotero_utils import Zotero
+from rM_utils import ReMarkable
+from common import list_local_files, compare
 
 def get_args():
     """Command line argument parsing"""
@@ -32,209 +30,98 @@ def get_args():
 
     return parser.parse_args()
 
-def zotero_instance(zot_library_id, zot_api_key):
-    """
 
-    Initizalize the zotero instance
+def sync(zot, rm, local_dir, verbose = False):
+    """
+    Synchronize Zotero library and
 
     Args:
-        zot_library_id: zotero personal library id
-        zot_api_key: zotero API Key
-
-    Returns: zotero instance
-
-    """
-    try:
-        zot = zotero.Zotero(zot_library_id, 'user', zot_api_key)
-        zot.top()
-        return zot
-
-    except zotero_errors.UserNotAuthorised as ex:
-        print(Fore.RED +
-              "ERROR - Zotero API error... " +
-              "Please run ensure the details are correct\n" +
-              f"Zotero Library ID: {zot_library_id}\n" +
-              f"Zotero API Key: {zot_api_key}" +
-              Style.RESET_ALL)
-        sys.exit(1)
-
-def rm_instance():
+        zot: Zotero instance
+        rm: ReMarkable instance
+        dir: local directory
     """
 
-    Initizalize the rmapy instance
+    zot.fetch()
+    rm.fetch()
+    local_paths = [i[len(local_dir):] for i in list_local_files(local_dir)]
+    zot_paths = [i.path for i in zot.files]
+    rm_paths = [i.path for i in rm.files]
 
-    Returns: rmapy instance
+    # Compare Zotero and reMarkable to the local folder
+    # to check if there are changes in any of the ends
+    to_add_zot, to_delete_zot = compare(zot_paths, local_paths)
+    to_add_rm, to_delete_rm = compare(rm_paths, local_paths)
 
-    """
+    if ((len(to_add_zot) == 0) &
+        (len(to_delete_zot) == 0) &
+        (len(to_add_rm) == 0) &
+        (len(to_delete_rm) == 0)):
+        print('Up to date.')
+        return False
 
-    try:
-        rm = Client()
+    if ((len(to_add_zot) != 0) |
+        (len(to_delete_zot) != 0)):
+        zot.pull(to_add_zot, to_delete_zot)
+        rm.push(to_add_zot, to_delete_zot)
 
-        rm.renew_token()
+    if ((len(to_add_rm) != 0) |
+        (len(to_delete_rm) != 0)):
+        rm.pull(to_add_rm, to_delete_rm)
+        zot.push(to_add_rm, to_delete_rm)
 
-        if not rm.is_auth():
-            print(Fore.RED +
-                  "ERROR - reMarkable API not authorized... " +
-                  "Please run authorize_rmapy.py" +
+
+    if verbose:
+        for file in to_add_zot:
+            print(Fore.GREEN +
+                  f"\t New to reMarkable: {file}" +
                   Style.RESET_ALL)
-            sys.exit(1)
 
-        return rm
+        for file in to_add_rm:
+            print(Fore.GREEN +
+                  f"\t New to Zotero: {file}" +
+                  Style.RESET_ALL)
 
-    except AuthError as ex:
-        print(Fore.RED +
-              f"ERROR - {ex} " +
-              "Please run authorize_rmapy.py" +
-              Style.RESET_ALL)
-        sys.exit(1)
+        for file in to_delete_zot:
+            print(Fore.RED +
+                  f"\t Deleted in reMarkable: {file}" +
+                  Style.RESET_ALL)
 
+        for file in to_delete_rm:
+            print(Fore.RED +
+                  f"\t Deleted in Zotero: {file}" +
+                  Style.RESET_ALL)
 
-def path_to(zot, collectionId):
-    """
+    print(Fore.GREEN +
+          f"{len(to_add_zot) + len(to_add_rm)} new files" +
+          Style.RESET_ALL)
 
-    Recursively gets the full path to the collection
-
-    Args:
-        zot: zotero instance
-        collectionId: zotero collection ID
-
-    Returns: string path to the collection
-
-    """
-
-    if collectionId:
-        c = zot.collection(collectionId)
-        return f"{path_to(zot, c['data']['parentCollection'])}{c['data']['name']}/"
-    else:
-        return ""
+    print(Fore.RED +
+          f"{len(to_delete_zot) + len(to_delete_rm)} deleted files" +
+          Style.RESET_ALL)
 
 
-def download_files_from_zotero(zot, directory, verbose = False):
-    """
 
-    Download all the .pdf files from the Zotero library that
-    have not been downloaded yet
-
-    Args:
-        zot: zotero instance
-        directory: local directory where the data will be downloaded to
-
-    """
-
-    count = 0
-
-    for c in zot.all_collections():
-        if c['meta']['numItems'] > 0:
-            c_name = c['data']['name']
-            c_path = os.path.join(path_to(zot, c['data']['parentCollection']), c_name)
-
-            for item in zot.collection_items(c['key']):
-                if item['data']['itemType'] == 'attachment':
-                    file_name = item['data']['title']
-                    if '.pdf' in file_name:
-                        file_dir = os.path.join(directory, c_path)
-
-                        if not os.path.exists(os.path.join(file_dir, file_name)):
-                            if not os.path.exists(file_dir):
-                                os.makedirs(file_dir)
-
-                            with open(os.path.join(file_dir, file_name), 'wb') as f:
-                                f.write(zot.file(item['data']['key']))
-
-                            print(Fore.GREEN +
-                                  "NEW FILE TO DOWNLOAD: " +
-                                  os.path.join(file_dir, file_name) +
-                                  Style.RESET_ALL)
-
-                            count = count + 1
-                        elif verbose:
-                            print("File exists locally: " +
-                                  os.path.join(file_dir, file_name))
-
-    if count:
-        print(f'Downloaded {count} new files from Zotero')
-    else:
-        print(f'No new files to download from Zotero')
-
-
-def upload_files_to_remarkable(rm, directory, verbose=False):
-    """
-
-    Uploads to reMarkable all files located in "directory" that
-    have not been uploaded to the same folder name "directory"
-    in the reMarkable root level.
-    It keeps the same folder structure.
-
-    Args:
-        rm: rmapy instance
-        directory: local directory where the data is located
-
-    """
-
-
-    collection = rm.get_meta_items()
-
-    count = 0
-
-    for path, dir, files in os.walk(directory):
-        for file in files:
-            parent = ""
-            folder = ""
-
-            # Create the directory in reMarkable
-            # if it does not exist
-            for p in path.split("/"):
-                folder = [ i for i in rm.get_meta_items()
-                    if ((i.VissibleName == p) & (i.Parent == parent)) ]
-                if folder == []:
-                    new_folder = Folder(VissibleName=p, Parent=parent)
-                    rm.create_folder(new_folder)
-                    folder = [ i for i in rm.get_meta_items()
-                        if ((i.VissibleName == p) & (i.Parent == parent)) ]
-                parent = folder[0].ID
-
-            # Upload the file to reMarkable
-            # if it does not exist
-            if [ i for i in collection.children(folder[0])
-                if ((i.Type == "DocumentType") &
-                    (i.VissibleName == file[:-4])) ]  == []:
-                rawDocument = ZipDocument(doc=os.path.join(path, file))
-
-                if rm.upload(rawDocument, folder[0]):
-                    print(Fore.GREEN +
-                        "NEW FILE TO UPLOAD: " +
-                        os.path.join(path, file) +
-                        Style.RESET_ALL)
-
-                    count = count + 1
-
-            elif verbose:
-                print("File exists in rM: " +
-                      os.path.join(path, file))
-
-    if count:
-        print(f'Uploaded {count} new files to reMarkable')
-    else:
-        print(f'No new files to upload to reMarkable')
 
 
 def main():
 
     args = get_args()
 
-    zot = zotero_instance(zot_library_id = args.zot_library_id,
-                              zot_api_key = args.zot_api_key)
-    rm = rm_instance()
+    local_dir = os.path.join(os.path.expanduser('~'),
+                    '.zot_rm_sync', args.directory)
 
 
-    download_files_from_zotero(zot = zot,
-                               directory = args.directory,
-                               verbose = args.verbose)
+    if not os.path.exists(local_dir):
+        os.makedirs(local_dir)
 
-    upload_files_to_remarkable(rm = rm,
-                               directory = args.directory,
-                               verbose = args.verbose)
+    zot = Zotero(dir = local_dir,
+                 zot_library_id = args.zot_library_id,
+                 zot_api_key = args.zot_api_key)
 
+    rm = ReMarkable(local_dir = local_dir,
+                    reMarkable_dir = args.directory)
+
+    sync(zot, rm, local_dir, args.verbose)
 
 if __name__ == "__main__":
     main()
