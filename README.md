@@ -1,4 +1,7 @@
 # zotero-reMarkable-sync
+
+# TODO: Update readme
+
 This repository allows you to synchronize all the .pdf files from your [Zotero](https://www.zotero.org) library to your [reMarkable](https://remarkable.com) device.
 
 How does it work?
