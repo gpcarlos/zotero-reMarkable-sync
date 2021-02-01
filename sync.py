@@ -2,9 +2,9 @@ import os
 import sys
 import argparse
 from colorama import Fore, Style
+from common import list_local_files, compare
 from zotero_utils import Zotero
 from rM_utils import ReMarkable
-from common import list_local_files, compare
 
 def get_args():
     """Command line argument parsing"""
@@ -41,8 +41,12 @@ def sync(zot, rm, local_dir, verbose = False):
         dir: local directory
     """
 
-    zot.fetch()
-    rm.fetch()
+    if not zot.fetch():
+        return False
+
+    if not rm.fetch():
+        return False
+
     local_paths = [i[len(local_dir):] for i in list_local_files(local_dir)]
     zot_paths = [i.path for i in zot.files]
     rm_paths = [i.path for i in rm.files]
@@ -57,17 +61,25 @@ def sync(zot, rm, local_dir, verbose = False):
         (len(to_add_rm) == 0) &
         (len(to_delete_rm) == 0)):
         print('Up to date.')
-        return False
+        return True
 
     if ((len(to_add_zot) != 0) |
         (len(to_delete_zot) != 0)):
-        zot.pull(to_add_zot, to_delete_zot)
-        rm.push(to_add_zot, to_delete_zot)
+
+        if not zot.pull(to_add_zot, to_delete_zot):
+            return False
+
+        if not rm.push(to_add_zot, to_delete_zot):
+            return False
 
     if ((len(to_add_rm) != 0) |
         (len(to_delete_rm) != 0)):
-        rm.pull(to_add_rm, to_delete_rm)
-        zot.push(to_add_rm, to_delete_rm)
+
+        if not rm.pull(to_add_rm, to_delete_rm):
+            return False
+
+        if not zot.push(to_add_rm, to_delete_rm):
+            return False
 
 
     if verbose:
@@ -92,24 +104,22 @@ def sync(zot, rm, local_dir, verbose = False):
                   Style.RESET_ALL)
 
     print(Fore.GREEN +
-          f"{len(to_add_zot) + len(to_add_rm)} new files" +
+          f"{len(to_add_zot) + len(to_add_rm)} new files." +
           Style.RESET_ALL)
 
     print(Fore.RED +
-          f"{len(to_delete_zot) + len(to_delete_rm)} deleted files" +
+          f"{len(to_delete_zot) + len(to_delete_rm)} deleted files." +
           Style.RESET_ALL)
 
-
+    return True
 
 
 
 def main():
-
     args = get_args()
 
     local_dir = os.path.join(os.path.expanduser('~'),
                     '.zot_rm_sync', args.directory)
-
 
     if not os.path.exists(local_dir):
         os.makedirs(local_dir)
@@ -121,7 +131,8 @@ def main():
     rm = ReMarkable(local_dir = local_dir,
                     reMarkable_dir = args.directory)
 
-    sync(zot, rm, local_dir, args.verbose)
+    if not sync(zot, rm, local_dir, args.verbose):
+        sys.exit("Synchronization Error.")
 
 if __name__ == "__main__":
     main()

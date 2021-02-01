@@ -2,7 +2,7 @@ import os
 import sys
 from colorama import Fore, Style
 from rmapy.api import Client
-from rmapy.exceptions import AuthError, ApiError
+from rmapy.exceptions import AuthError
 from rmapy.folder import Folder
 from rmapy.document import ZipDocument
 from common import File
@@ -70,6 +70,8 @@ class ReMarkable():
 
         Fetch all the .pdf file stored in directory self.dir_rm.
 
+        Returns: True is success, False otherwise
+
         """
 
         self.files = []
@@ -81,11 +83,11 @@ class ReMarkable():
         if len(folder) == 1:
             self.recursive_fetch(folder[0])
 
-
         elif len(folder) == 0:
             print(Fore.RED +
                   f'ERROR - Did not find a {dir} directory ' +
                   'in reMarkable' + Style.RESET_ALL)
+            return False
 
         else:
             print(Fore.RED +
@@ -93,10 +95,12 @@ class ReMarkable():
                   'directory in reMarkable. Only one ' +
                   'directory with that name is allowed' +
                   Style.RESET_ALL)
-            sys.exit(1)
+            return False
+
+        return True
 
 
-    def pull(self, to_add, to_delete):
+    def pull(self, to_add, to_delete, verbose = False):
         """
 
         Pull from reMarkable the files to
@@ -111,26 +115,41 @@ class ReMarkable():
         Args:
             to_add: list of files to add
             to_delete: list of files to delete
+            verbose: enable print information
+
+        Returns: True is success, False otherwise
 
         """
-        # print("reMarkable - Pull information")
 
+        if verbose:
+            print("reMarkable - Pull information")
+
+        # TODO: Pull new files from reMarkable
         # files_to_add = [i for i in self.files if i.path in to_add]
         # for file in files_to_add:
-        #     print(Fore.GREEN +
-        #           "\t New: " +
-        #           file.path + Style.RESET_ALL)
+        #     # Pull file
+        #     if verbose:
+        #         print(Fore.GREEN +
+        #               "\t New: {file.path} - TODO" +
+        #                Style.RESET_ALL)
 
         for file in to_delete:
             file_path = os.path.join(self.dir_l, file)
 
-            if os.path.exists(file_path):
+            try:
                 os.remove(file_path)
-                # print(Fore.RED +
-                #       f"\t Deleted: {file_path}" +
-                #       Style.RESET_ALL)
+                if verbose:
+                    print(Fore.RED +
+                          f"\t Deleted: {file_path}" +
+                          Style.RESET_ALL)
 
-    def push(self, to_add, to_delete):
+            except Exception as ex:
+                print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                return False
+
+        return True
+
+    def push(self, to_add, to_delete, verbose = False):
         """
 
         Push to reMarkable the files to add
@@ -139,9 +158,14 @@ class ReMarkable():
         Args:
             to_add: list of files to add
             to_delete: list of files to delete
+            verbose: enable print information
+
+        Returns: True is success, False otherwise
 
         """
-        # print("reMarkable - Push information")
+
+        if verbose:
+            print("reMarkable - Push information")
 
         for file in to_add:
             file_path_l = os.path.join(self.dir_l, file)
@@ -154,33 +178,78 @@ class ReMarkable():
             for p in os.path.dirname(file_path_rm).split("/"):
                 folder = [ i for i in self.rm.get_meta_items()
                     if ((i.VissibleName == p) & (i.Parent == parent)) ]
+
                 if len(folder) == 0:
                     new_folder = Folder(VissibleName=p, Parent=parent)
-                    rm.create_folder(new_folder)
+
+                    if not rm.create_folder(new_folder):
+                        print(Fore.RED +
+                              f"\t ERROR - Cannot create folder {p} of path {os.path.dirname(file_path_rm)}" +
+                              Style.RESET_ALL)
+                        return False
+
                     folder = [ i for i in self.rm.get_meta_items()
-                        if ((i.VissibleName == p) & (i.Parent == parent)) ]
+                             if ((i.VissibleName == p) & (i.Parent == parent)) ]
                 parent = folder[0].ID
 
             # Upload the file to reMarkable
             # if it does not exist
-            if [ i for i in self.rm.get_meta_items().children(folder[0])
-                if ((i.Type == "DocumentType") &
-                    (i.VissibleName == file[:-4])) ]  == []:
+            if (len([ i for i in self.rm.get_meta_items().children(folder[0])
+                if ((i.Type == "DocumentType") & (i.VissibleName == file[:-4]))]) == 0):
 
-                if os.path.exists(file_path_l):
+                try:
                     rawDocument = ZipDocument(doc=file_path_l)
                     self.rm.upload(rawDocument, folder[0])
 
-                    # print(Fore.GREEN +
-                    #       f"\t New: {file_path_rm}" +
-                    #       Style.RESET_ALL)
+                    if verbose:
+                        print(Fore.GREEN +
+                              f"\t New: {file_path_rm}" +
+                              Style.RESET_ALL)
+
+                except Exception as ex:
+                    print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                    return False
+
 
         files_to_delete = [i for i in self.files if i.path in to_delete]
         for file in files_to_delete:
             file_path = os.path.join(self.dir_rm, file.path)
-            doc = self.rm.get_doc(file.id)
-            self.rm.delete(doc)
+            try:
+                doc = self.rm.get_doc(file.id)
+                self.rm.delete(doc)
 
-            # print(Fore.RED +
-            #       f"\t Deleted: {file_path}" +
-            #       Style.RESET_ALL)
+                if verbose:
+                    print(Fore.RED +
+                          f"\t Deleted: {file_path}" +
+                          Style.RESET_ALL)
+
+            except Exception as ex:
+                print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                return False
+
+
+def authorize(security_code):
+    """
+
+    Authorize rmapy to comunicate to our reMarkable device
+
+    Args:
+        x: security code
+
+    Returns: True is authorized, False otherwise
+
+    """
+    
+    rma = Client()
+
+    try:
+        rma.register_device(security_code)
+        rma.renew_token()
+        return rma.is_auth()
+
+    except AuthError as ex:
+        print(Fore.RED +
+              f"ERROR - Cannot authorize the reMarkable device " +
+              f"\n\t {ex}" + Style.RESET_ALL)
+
+        return False

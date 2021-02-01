@@ -1,7 +1,8 @@
 import os
 import sys
 from colorama import Fore, Style
-from pyzotero import zotero, zotero_errors
+from pyzotero import zotero
+from pyzotero.zotero_errors import UserNotAuthorised
 from common import File
 
 class Zotero():
@@ -17,6 +18,7 @@ class Zotero():
             zot_api_key: zotero API Key
 
         """
+
         self.files = []
         self.dir = dir
 
@@ -24,7 +26,7 @@ class Zotero():
             self.zot = zotero.Zotero(zot_library_id, 'user', zot_api_key)
             self.zot.top()
 
-        except zotero_errors.UserNotAuthorised as ex:
+        except UserNotAuthorised as ex:
             print(Fore.RED +
                   "ERROR - Zotero API error... " +
                   "Please run ensure the details are correct\n" +
@@ -54,11 +56,12 @@ class Zotero():
     def fetch(self):
         """
 
-        List all the .pdf files in the Zotero library and their
-        parentItem key. If the file doesn't have a parentItem,
-        the parentItem key is its key.
+        Fetch all the .pdf file stored in the Zotero library.
+
+        Returns: True is success, False otherwise
 
         """
+
         self.files = []
 
         for c in self.zot.all_collections():
@@ -81,8 +84,10 @@ class Zotero():
                             file = File(file_path, item['key'], parent)
                             self.files.append(file)
 
+        return True
 
-    def pull(self, to_add, to_delete):
+
+    def pull(self, to_add, to_delete, verbose = False):
         """
 
         Pull from Zotero the files to add and
@@ -91,56 +96,81 @@ class Zotero():
         Args:
             to_add: list of files to add
             to_delete: list of files to delete
+            verbose: enable print information
+
+        Returns: True is success, False otherwise
 
         """
-        # print("Zotero - Pull information")
+
+        if verbose:
+            print("Zotero - Pull information")
 
         files_to_add = [i for i in self.files if i.path in to_add]
         for file in files_to_add:
             file_path = os.path.join(self.dir, file.path)
 
-            if not os.path.exists(os.path.dirname(file_path)):
-                os.makedirs(os.path.dirname(file_path))
+            try:
+                if not os.path.exists(os.path.dirname(file_path)):
+                    os.makedirs(os.path.dirname(file_path))
 
-            with open(file_path, 'wb') as f:
-                f.write(self.zot.file(file.id))
+                with open(file_path, 'wb') as f:
+                    f.write(self.zot.file(file.id))
 
-            # print(Fore.GREEN +
-            #       f"\t New: {file_path}" +
-            #       Style.RESET_ALL)
+                if verbose:
+                    print(Fore.GREEN +
+                          f"\t New: {file_path}" +
+                          Style.RESET_ALL)
+
+            except Exception as ex:
+                print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                return False
 
         for file in to_delete:
             file_path = os.path.join(self.dir, file)
 
-            if os.path.exists(file_path):
+            try:
                 os.remove(file_path)
-                # print(Fore.RED +
-                #       f"\t Deleted: {file_path}" +
-                #       Style.RESET_ALL)
+
+                if verbose:
+                    print(Fore.RED +
+                          f"\t Deleted: {file_path}" +
+                          Style.RESET_ALL)
+
+            except Exception as ex:
+                print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                return False
 
         return True
 
 
 
-    def push(self, to_add, to_delete):
+    def push(self, to_add, to_delete, verbose = False):
         """
 
         Push to Zotero the files to add
         and the files to delete
 
-        TODO: Implement push of files
+        TODO: Implement push files to Zotero
 
         Args:
             to_add: list of files to add
             to_delete: list of files to delete
+            verbose: enable print information
+
+        Returns: True is success, False otherwise
 
         """
-        # print("Zotero - Push information")
 
+        if verbose:
+            print("Zotero - Push information")
+
+        # TODO: Push new files to Zotero
         # for file in to_add:
-        #     print(Fore.GREEN +
-        #           "\t New: " +
-        #           file.path + Style.RESET_ALL)
+        #     # Push file
+        #     if verbose:
+        #         print(Fore.GREEN +
+        #               "\t New: " +
+        #               file.path + Style.RESET_ALL)
 
         files_to_delete = [i for i in self.files if i.path in to_delete]
         for file in files_to_delete:
@@ -149,9 +179,17 @@ class Zotero():
             else:
                 id = file.id
 
-            item = self.zot.item(id)
+            try:
+                item = self.zot.item(id)
+                self.zot.delete_item(item)
 
-            self.zot.delete_item(item)
-            # print(Fore.RED +
-            #       "\t Deleted: {file.path}" +
-            #       Style.RESET_ALL)
+                if verbose:
+                    print(Fore.RED +
+                          "\t Deleted: {file.path}" +
+                          Style.RESET_ALL)
+
+            except Exception as ex:
+                print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
+                return False
+
+        return True
