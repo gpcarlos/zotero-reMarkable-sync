@@ -3,7 +3,7 @@ import sys
 from colorama import Fore, Style
 from pyzotero import zotero
 from pyzotero.zotero_errors import UserNotAuthorised
-from common import File
+from utils.common import File
 
 class Zotero():
 

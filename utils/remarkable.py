@@ -5,7 +5,7 @@ from rmapy.api import Client
 from rmapy.exceptions import AuthError
 from rmapy.folder import Folder
 from rmapy.document import ZipDocument
-from common import File
+from utils.common import File
 
 class ReMarkable():
 
@@ -239,7 +239,7 @@ def authorize(security_code):
     Returns: True is authorized, False otherwise
 
     """
-    
+
     rma = Client()
 
     try:
