@@ -227,6 +227,7 @@ class ReMarkable():
                 print(Fore.RED + f"ERROR - {ex}" + Style.RESET_ALL)
                 return False
 
+        return True
 
 def authorize(security_code):
     """
