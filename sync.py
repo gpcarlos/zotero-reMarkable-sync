@@ -31,9 +31,30 @@ def get_args():
     return parser.parse_args()
 
 
-def sync(zot, rm, local_dir, verbose = False):
+def initialize(zot, rm, dir):
     """
-    Synchronize Zotero library and
+    Initialize the local directory
+
+    Args:
+        zot: Zotero instance
+        rm: ReMarkable instance
+        dir: local directory
+    """
+
+    if not zot.fetch():
+        return False
+
+    zot_paths = [i.path for i in zot.files]
+
+    if not zot.pull(zot_paths, []):
+        return False
+
+    return True
+
+
+def sync(zot, rm, dir, verbose = False):
+    """
+    Synchronize Zotero library and reMarkable
 
     Args:
         zot: Zotero instance
@@ -47,7 +68,7 @@ def sync(zot, rm, local_dir, verbose = False):
     if not rm.fetch():
         return False
 
-    local_paths = [i[len(local_dir):] for i in list_local_files(local_dir)]
+    local_paths = [i[len(dir):] for i in list_local_files(dir)]
     zot_paths = [i.path for i in zot.files]
     rm_paths = [i.path for i in rm.files]
 
@@ -121,15 +142,17 @@ def main():
     local_dir = os.path.join(os.path.expanduser('~'),
                     '.zot_rm_sync', args.directory)
 
-    if not os.path.exists(local_dir):
-        os.makedirs(local_dir)
-
     zot = Zotero(dir = local_dir,
                  zot_library_id = args.zot_library_id,
                  zot_api_key = args.zot_api_key)
 
     rm = ReMarkable(local_dir = local_dir,
                     reMarkable_dir = args.directory)
+
+    if not os.path.exists(local_dir):
+        os.makedirs(local_dir)
+        if not initialize(zot, rm, local_dir):
+            sys.exit("Initialization Error.")
 
     if not sync(zot, rm, local_dir, args.verbose):
         sys.exit("Synchronization Error.")
