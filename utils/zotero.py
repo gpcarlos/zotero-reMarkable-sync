@@ -10,7 +10,7 @@ class Zotero():
     def __init__(self, dir, zot_library_id, zot_api_key):
         """
 
-        Initizalize the zotero instance
+        Initialize the zotero instance
 
         Args:
             dir: local directory

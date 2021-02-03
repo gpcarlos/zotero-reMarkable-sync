@@ -42,8 +42,16 @@ Get your [**Zotero Library ID** and **Zotero API Key**](https://www.zotero.org/s
 
 ## Use
 
+#### Initialization
+
 ``` bash
-python sync.py --zot-library-id/-l <zot-library-id> --zot-api-key/-k <zot-api-key> --directory/-d <dir-name> [--verbose/-v]
+python sync.py --zot-library-id/-l <zot-library-id> --zot-api-key/-k <zot-api-key> --directory/-d <dir-name> --initialize/-ini
+```
+
+#### Synchronization
+
+``` bash
+python sync.py --zot-library-id/-l <zot-library-id> --zot-api-key/-k <zot-api-key> --directory/-d <dir-name> [--quiet/-q]
 ```
 
 ## Features

@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+import shutil
 from colorama import Fore, Style
 from utils.common import list_local_files, compare
 from utils.zotero import Zotero
@@ -26,7 +27,9 @@ def get_args():
                         required=True,
                         help='Folder in reMarkable root that will sync')
 
-    parser.add_argument('--verbose', '-v', default=False, action='store_true', required=False)
+    parser.add_argument('--initialize', '-ini', default=False, action='store_true', required=False)
+
+    parser.add_argument('--quiet', '-q', default=False, action='store_true', required=False)
 
     return parser.parse_args()
 
@@ -41,18 +44,55 @@ def initialize(zot, rm, dir):
         dir: local directory
     """
 
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    else:
+        shutil.rmtree(dir)
+
     if not zot.fetch():
         return False
 
+    if not rm.fetch():
+        return False
+
     zot_paths = [i.path for i in zot.files]
+    rm_paths = [i.path for i in rm.files]
+
+    print(Fore.GREEN +
+          "Initializing local directory..." +
+          Style.RESET_ALL)
 
     if not zot.pull(zot_paths, []):
         return False
 
+    for file in zot_paths:
+        print(Fore.GREEN +
+              f"\t Downloaded to local dir: {file}" +
+              Style.RESET_ALL)
+
+    if len(rm_paths) == 0:
+        print(Fore.GREEN +
+              "Initializing reMarkable..." +
+              Style.RESET_ALL)
+
+        if not rm.push(zot_paths, []):
+            return False
+
+        for file in zot_paths:
+            print(Fore.GREEN +
+                  f"\t New to reMarkable: {file}" +
+                  Style.RESET_ALL)
+
+    else:
+        print(f"Found {len(rm_paths)} files in reMarkable {rm.dir_rm} directory.\n" +
+              Fore.RED + "IMPORTANT" + Style.RESET_ALL +
+              ": The script will assume that reMarkable and Zotero have " +
+              "been previously synced.")
+
     return True
 
 
-def sync(zot, rm, dir, verbose = False):
+def sync(zot, rm, dir, quiet = False):
     """
     Synchronize Zotero library and reMarkable
 
@@ -60,6 +100,7 @@ def sync(zot, rm, dir, verbose = False):
         zot: Zotero instance
         rm: ReMarkable instance
         dir: local directory
+        quiet: quiet mode, no prints
     """
 
     if not zot.fetch():
@@ -103,7 +144,7 @@ def sync(zot, rm, dir, verbose = False):
             return False
 
 
-    if verbose:
+    if not quiet:
         for file in to_add_zot:
             print(Fore.GREEN +
                   f"\t New to reMarkable: {file}" +
@@ -149,13 +190,17 @@ def main():
     rm = ReMarkable(local_dir = local_dir,
                     reMarkable_dir = args.directory)
 
-    if not os.path.exists(local_dir):
-        os.makedirs(local_dir)
+    if args.initialize:
         if not initialize(zot, rm, local_dir):
             sys.exit("Initialization Error.")
 
-    if not sync(zot, rm, local_dir, args.verbose):
-        sys.exit("Synchronization Error.")
+    else:
+        if not os.path.exists(local_dir):
+            print('Please initialize with --initialize')
+
+        if not sync(zot, rm, local_dir, args.quiet):
+            sys.exit("Synchronization Error.")
+
 
 if __name__ == "__main__":
     main()

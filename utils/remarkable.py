@@ -12,10 +12,11 @@ class ReMarkable():
     def __init__(self, local_dir, reMarkable_dir):
         """
 
-        Initizalize the rmapy instance
+        Initialize the rmapy instance
 
         Args:
-            dir: local and reMarkable directory
+            local_dir: local directory
+            reMarkable_dir: reMarkable directory
 
         """
 
@@ -40,6 +41,18 @@ class ReMarkable():
                   'Please run authorize_rmapy.py' +
                   Style.RESET_ALL)
             sys.exit(1)
+
+        folder = [ i for i in self.rm.get_meta_items()
+            if ((i.VissibleName == self.dir_rm) & (i.Parent == "")) ]
+
+        if len(folder) == 0:
+            new_folder = Folder(VissibleName=self.dir_rm, Parent="")
+
+            if not self.rm.create_folder(new_folder):
+                print(Fore.RED +
+                      f"\t ERROR - Cannot create folder {self.dir_rm} in reMarkable root directory" +
+                      Style.RESET_ALL)
+                sys.exit(1)
 
 
     def recursive_fetch(self, item, path = ''):
@@ -85,13 +98,13 @@ class ReMarkable():
 
         elif len(folder) == 0:
             print(Fore.RED +
-                  f'ERROR - Did not find a {dir} directory ' +
+                  f'ERROR - Did not find a {self.dir_rm} directory ' +
                   'in reMarkable' + Style.RESET_ALL)
             return False
 
         else:
             print(Fore.RED +
-                  f'ERROR - Found more than one {dir} ' +
+                  f'ERROR - Found more than one {self.dir_rm} ' +
                   'directory in reMarkable. Only one ' +
                   'directory with that name is allowed' +
                   Style.RESET_ALL)
@@ -182,7 +195,7 @@ class ReMarkable():
                 if len(folder) == 0:
                     new_folder = Folder(VissibleName=p, Parent=parent)
 
-                    if not rm.create_folder(new_folder):
+                    if not self.rm.create_folder(new_folder):
                         print(Fore.RED +
                               f"\t ERROR - Cannot create folder {p} of path {os.path.dirname(file_path_rm)}" +
                               Style.RESET_ALL)
@@ -241,12 +254,12 @@ def authorize(security_code):
 
     """
 
-    rma = Client()
+    rm = Client()
 
     try:
-        rma.register_device(security_code)
-        rma.renew_token()
-        return rma.is_auth()
+        rm.register_device(security_code)
+        rm.renew_token()
+        return rm.is_auth()
 
     except AuthError as ex:
         print(Fore.RED +
